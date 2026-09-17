@@ -131,9 +131,23 @@ export const LoginModal: React.FC<LoginModalProps> = ({
    */
   const finalizeAuthentication = (profileData: UserProfile) => {
     try {
+      // 0. Force-close modal immediately so popup closes with 0ms delay
+      setShowAuthModal(false);
+      if (onClose) onClose();
+      closeLoginModal();
+      setIsLoginModalOpen(false);
+      setIsSigningIn(false);
+
       const sessionToken = `btn_sess_${profileData.id || Date.now()}_${Date.now()}`;
+      const derivedName = profileData.displayName || profileData.name || (profileData.email ? profileData.email.split('@')[0] : 'विद्यार्थी');
+      const authenticAvatar = profileData.photoURL || profileData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(derivedName)}&background=0052FF&color=fff&size=256`;
+
       const enrichedProfile: UserProfile = {
         ...profileData,
+        displayName: derivedName,
+        name: derivedName,
+        photoURL: authenticAvatar,
+        avatarUrl: authenticAvatar,
         sessionToken,
         isGuest: false,
         isRegistered: true
@@ -142,6 +156,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       // 1. Save session in LocalStorage immediately
       const serialized = JSON.stringify(enrichedProfile);
       localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('btn_authenticated_user', serialized);
       localStorage.setItem('user', serialized);
       localStorage.setItem('user_profile', serialized);
       safeStorage.setItem('user_profile', serialized);
@@ -152,29 +167,20 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       localStorage.setItem('btn_last_auth_name', enrichedProfile.displayName || enrichedProfile.name || '');
       localStorage.setItem('btn_auth_uid', enrichedProfile.id);
 
-      // 2. DISMISS LOADING STATE IMMEDIATELY so user is NEVER stuck on "Signing in..."
-      setIsSigningIn(false);
-
-      // 3. React App State Updates: Immediately update global auth state (isLoggedIn = true)
-      if (setIsLoggedIn) setIsLoggedIn(true);
-      if (appSetIsLoggedIn) appSetIsLoggedIn(true);
+      // 2. React App State Updates: Immediately update global auth state (setUser, isLoggedIn)
       if (setUser) setUser(enrichedProfile);
       if (appSetUser) appSetUser(enrichedProfile);
+      if (setIsLoggedIn) setIsLoggedIn(true);
+      if (appSetIsLoggedIn) appSetIsLoggedIn(true);
       if (onSuccess) onSuccess(enrichedProfile);
 
-      // 4. Dispatch global window events
+      // 3. Dispatch global window events for instant header/dashboard reactive updates
       window.dispatchEvent(new CustomEvent('btn:profile-updated', { detail: enrichedProfile }));
       window.dispatchEvent(new CustomEvent('btn:user-login', { detail: enrichedProfile }));
 
-      // 5. Dismiss modal dialog immediately: Call setShowAuthModal(false) and onClose()
-      setShowAuthModal(false);
-      if (onClose) onClose();
-      closeLoginModal();
-      setIsLoginModalOpen(false);
-
       showToast(`स्वागत छ, ${enrichedProfile.displayName || enrichedProfile.name}!`, 'success');
 
-      // 6. DO NOT block UI or wait for Firestore async background sync (`saveUserToFirestore`).
+      // 4. DO NOT block UI or wait for Firestore async background sync (`saveUserToFirestore`).
       // Run Firestore profile creation asynchronously in the background.
       setTimeout(() => {
         FirebaseAuthService.saveUserToFirestore(enrichedProfile).catch(() => {});
@@ -182,7 +188,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         DbService.saveStudentProfile(enrichedProfile).catch(() => {});
       }, 0);
 
-      // 7. Log authenticated user login event
+      // 5. Log authenticated user login event
       ActivityTrackingService.logActivity({
         user: enrichedProfile,
         activityType: 'reading',
@@ -191,16 +197,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }).catch(() => {});
     } catch (err) {
       console.error('Authentication finalization error:', err);
+      setShowAuthModal(false);
+      if (onClose) onClose();
+      closeLoginModal();
+      setIsLoginModalOpen(false);
       setIsSigningIn(false);
       if (setIsLoggedIn) setIsLoggedIn(true);
       if (appSetIsLoggedIn) appSetIsLoggedIn(true);
       if (setUser) setUser(profileData);
       if (appSetUser) appSetUser(profileData);
       if (onSuccess) onSuccess(profileData);
-      setShowAuthModal(false);
-      if (onClose) onClose();
-      closeLoginModal();
-      setIsLoginModalOpen(false);
     }
   };
 

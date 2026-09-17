@@ -62,7 +62,10 @@ export class StorageService {
 
   static isUserLoggedIn(): boolean {
     try {
-      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('user_profile') : null;
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('isLoggedIn') === 'true') {
+        return true;
+      }
+      const raw = typeof localStorage !== 'undefined' ? (localStorage.getItem('btn_authenticated_user') || localStorage.getItem('user_profile') || localStorage.getItem('user')) : null;
       if (!raw) return false;
       const parsed = JSON.parse(raw);
       return Boolean(parsed && parsed.email && parsed.email.includes('@') && !parsed.isGuest);
@@ -75,6 +78,9 @@ export class StorageService {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('user_profile');
+        localStorage.removeItem('user');
+        localStorage.removeItem('btn_authenticated_user');
+        localStorage.removeItem('isLoggedIn');
         localStorage.removeItem(STORAGE_KEYS.USER_PROFILE);
         localStorage.removeItem('btn_registration_completed_v1');
         localStorage.removeItem('btn_student_profile_v2');
@@ -84,6 +90,8 @@ export class StorageService {
         localStorage.removeItem('btn_last_auth_provider');
       }
       safeStorage.removeItem('user_profile');
+      safeStorage.removeItem('user');
+      safeStorage.removeItem('btn_authenticated_user');
       safeStorage.removeItem(STORAGE_KEYS.USER_PROFILE);
       safeStorage.removeItem('btn_registration_completed_v1');
       safeStorage.removeItem('btn_student_profile_v2');
@@ -99,7 +107,7 @@ export class StorageService {
 
   static getUserProfile(): UserProfile {
     try {
-      const authData = safeStorage.getItem('user_profile') || (typeof localStorage !== 'undefined' ? localStorage.getItem('user_profile') : null);
+      const authData = (typeof localStorage !== 'undefined' ? (localStorage.getItem('btn_authenticated_user') || localStorage.getItem('user_profile') || localStorage.getItem('user')) : null) || safeStorage.getItem('user_profile');
       if (authData) {
         const parsed = safeJsonParse(authData, null);
         if (parsed && typeof parsed === 'object') {
@@ -130,6 +138,15 @@ export class StorageService {
       const clean = sanitizeUserProfile(profile);
       safeStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(clean));
       safeStorage.setItem('user_profile', JSON.stringify(clean));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(clean));
+        localStorage.setItem('user_profile', JSON.stringify(clean));
+        localStorage.setItem('user', JSON.stringify(clean));
+        if (!clean.isGuest && clean.email) {
+          localStorage.setItem('btn_authenticated_user', JSON.stringify(clean));
+          localStorage.setItem('isLoggedIn', 'true');
+        }
+      }
     } catch (e) {
       console.error('Failed to save profile', e);
     }

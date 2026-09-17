@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, X, Send, Bot, User, BookOpen, CheckSquare, Copy, Check } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { QuizSet } from '../../types';
@@ -29,6 +29,17 @@ export const AiAssistantModal: React.FC = () => {
   const [inputQuery, setInputQuery] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    if (isAiModalOpen) {
+      scrollToBottom();
+    }
+  }, [messages, isTyping, isAiModalOpen]);
 
   if (!isAiModalOpen) return null;
 
@@ -263,7 +274,7 @@ export const AiAssistantModal: React.FC = () => {
   };
 
   const handleSendPrompt = async (promptText: string) => {
-    if (!promptText.trim()) return;
+    if (!promptText.trim() || isTyping) return;
 
     const queryToSend = promptText.trim();
     const userMsg: ChatMessage = {
@@ -272,48 +283,121 @@ export const AiAssistantModal: React.FC = () => {
       text: queryToSend
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    const aiMsgId = `ai-${Date.now()}`;
+    const initialAiMsg: ChatMessage = {
+      id: aiMsgId,
+      sender: 'ai',
+      text: ''
+    };
+
+    // Prepare history of recent messages for multi-turn context
+    const chatHistory = messages
+      .filter(m => m.id !== 'msg-1' || messages.length > 2)
+      .slice(-6)
+      .map(m => ({ sender: m.sender, text: m.text }));
+
+    setMessages(prev => [...prev, userMsg, initialAiMsg]);
     setInputQuery('');
     setIsTyping(true);
 
-    let finalAiResponse = '';
+    let streamedAny = false;
+    let accumulatedText = '';
 
     try {
-      // Fetch response from server-side Gemini AI assistant endpoint with a 5-second timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-      const response = await fetch('/api/ai-assistant', {
+      const response = await fetch('/api/ai-assistant-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: queryToSend }),
+        body: JSON.stringify({
+          query: queryToSend,
+          history: chatHistory
+        }),
         signal: controller.signal
       });
 
       clearTimeout(timeoutId);
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.answer && data.answer.trim()) {
-          finalAiResponse = data.answer.trim();
+      if (response.ok && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const dataStr = trimmed.replace(/^data:\s*/, '');
+            if (dataStr === '[DONE]') {
+              break;
+            }
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.chunk) {
+                streamedAny = true;
+                accumulatedText += parsed.chunk;
+                setMessages(prev =>
+                  prev.map(m => (m.id === aiMsgId ? { ...m, text: accumulatedText } : m))
+                );
+              }
+            } catch {
+              // Ignore partial JSON
+            }
+          }
         }
       }
-    } catch (fetchErr) {
-      console.warn('AI Assistant API call resolved via knowledge engine:', fetchErr);
+    } catch (streamErr) {
+      console.warn('Streaming failed, checking fallback:', streamErr);
     }
 
-    // If server response is empty or failed, use the rich domain knowledge engine
-    if (!finalAiResponse) {
-      finalAiResponse = generateOfflineKnowledgeResponse(queryToSend);
+    // If streaming failed to return text, fallback to standard endpoint or rich domain engine
+    if (!streamedAny || !accumulatedText.trim()) {
+      try {
+        const fallbackRes = await fetch('/api/ai-assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: queryToSend,
+            history: chatHistory
+          })
+        });
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          if (data.answer && data.answer.trim()) {
+            accumulatedText = data.answer.trim();
+          }
+        }
+      } catch (fbErr) {
+        console.warn('Fallback API error:', fbErr);
+      }
+
+      if (!accumulatedText.trim()) {
+        accumulatedText = generateOfflineKnowledgeResponse(queryToSend);
+      }
+
+      // Smooth simulated word-by-word streaming for offline/fallback responses
+      const words = accumulatedText.split(' ');
+      let currentDisplay = '';
+      for (let i = 0; i < words.length; i += 3) {
+        currentDisplay += words.slice(i, i + 3).join(' ') + ' ';
+        setMessages(prev =>
+          prev.map(m => (m.id === aiMsgId ? { ...m, text: currentDisplay } : m))
+        );
+        await new Promise(r => setTimeout(r, 20));
+      }
+      setMessages(prev =>
+        prev.map(m => (m.id === aiMsgId ? { ...m, text: accumulatedText } : m))
+      );
     }
 
-    const aiMsg: ChatMessage = {
-      id: `ai-${Date.now()}`,
-      sender: 'ai',
-      text: finalAiResponse
-    };
-
-    setMessages(prev => [...prev, aiMsg]);
     setIsTyping(false);
   };
 
@@ -435,6 +519,7 @@ export const AiAssistantModal: React.FC = () => {
               <span>AI साथीले नेपालीमा उत्तर तयार गर्दैछ...</span>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Suggested Prompt Chips */}
