@@ -26,6 +26,8 @@ interface AppContextType {
   toggleTheme: () => void;
   user: UserProfile;
   setUser: (user: UserProfile) => void;
+  isLoggedIn: boolean;
+  setIsLoggedIn: (loggedIn: boolean) => void;
   isLoginModalOpen: boolean;
   setIsLoginModalOpen: (open: boolean) => void;
   loginModalMessage: string;
@@ -137,6 +139,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode; initialUser?: Us
     if (initialUser) return sanitizeUserProfile(initialUser);
     return StorageService.getUserProfile();
   });
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    const u = initialUser ? sanitizeUserProfile(initialUser) : StorageService.getUserProfile();
+    return Boolean(u && !u.isGuest && !!u.email);
+  });
+
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>(StorageService.getBookmarks());
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(StorageService.getPurchases());
   const [notifications, setNotifications] = useState<AppNotification[]>(() => StorageService.getNotifications());
@@ -157,23 +165,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode; initialUser?: Us
   // Sync initialUser if updated from parent
   useEffect(() => {
     if (initialUser) {
-      setUserState(sanitizeUserProfile(initialUser));
+      const sanitized = sanitizeUserProfile(initialUser);
+      setUserState(sanitized);
+      setIsLoggedIn(Boolean(sanitized && !sanitized.isGuest && !!sanitized.email));
     }
   }, [initialUser]);
 
-  // Listen to profile updates across the app to update state immediately
+  // Keep isLoggedIn in sync with user state
+  useEffect(() => {
+    setIsLoggedIn(Boolean(user && !user.isGuest && !!user.email));
+  }, [user]);
+
+  // Listen to profile updates & login events across the app to update state immediately
   useEffect(() => {
     const handleProfileUpdated = (e: Event) => {
       const customEvt = e as CustomEvent<UserProfile>;
       if (customEvt.detail) {
-        setUserState(sanitizeUserProfile(customEvt.detail));
+        const sanitized = sanitizeUserProfile(customEvt.detail);
+        setUserState(sanitized);
+        const loggedIn = Boolean(sanitized && !sanitized.isGuest && !!sanitized.email);
+        setIsLoggedIn(loggedIn);
+        if (loggedIn) {
+          setIsLoginModalOpen(false);
+        }
       } else {
-        setUserState(StorageService.getUserProfile());
+        const u = StorageService.getUserProfile();
+        setUserState(u);
+        const loggedIn = Boolean(u && !u.isGuest && !!u.email);
+        setIsLoggedIn(loggedIn);
+        if (loggedIn) {
+          setIsLoginModalOpen(false);
+        }
       }
     };
+
+    const handleUserLogin = (e: Event) => {
+      const customEvt = e as CustomEvent<UserProfile>;
+      if (customEvt.detail) {
+        const sanitized = sanitizeUserProfile(customEvt.detail);
+        setUserState(sanitized);
+        setIsLoggedIn(true);
+        setIsLoginModalOpen(false);
+      }
+    };
+
     window.addEventListener('btn:profile-updated', handleProfileUpdated);
+    window.addEventListener('btn:user-login', handleUserLogin);
     return () => {
       window.removeEventListener('btn:profile-updated', handleProfileUpdated);
+      window.removeEventListener('btn:user-login', handleUserLogin);
     };
   }, []);
 
@@ -370,9 +410,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode; initialUser?: Us
   const [pendingCallback, setPendingCallback] = useState<(() => void) | null>(null);
 
   const setUser = (newUser: UserProfile) => {
-    setUserState(newUser);
-    StorageService.saveUserProfile(newUser);
-    if (newUser && !newUser.isGuest && newUser.email && pendingCallback) {
+    const sanitized = sanitizeUserProfile(newUser);
+    setUserState(sanitized);
+    StorageService.saveUserProfile(sanitized);
+    const loggedIn = Boolean(sanitized && !sanitized.isGuest && !!sanitized.email);
+    setIsLoggedIn(loggedIn);
+    if (loggedIn) {
+      setIsLoginModalOpen(false);
+    }
+    if (loggedIn && pendingCallback) {
       const cb = pendingCallback;
       setPendingCallback(null);
       setTimeout(() => {
@@ -389,6 +435,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode; initialUser?: Us
     }
     const guest = StorageService.getGuestProfile();
     setUserState(guest);
+    setIsLoggedIn(false);
     window.dispatchEvent(new CustomEvent('btn:logout'));
     window.dispatchEvent(new CustomEvent('btn:profile-updated', { detail: guest }));
     addToast('सफलतापूर्वक लगआउट भयो। तपाईं अतिथि (Guest) मोडमा हुनुहुन्छ।', 'info');
@@ -607,6 +654,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode; initialUser?: Us
         toggleTheme,
         user,
         setUser,
+        isLoggedIn,
+        setIsLoggedIn,
         isLoginModalOpen,
         setIsLoginModalOpen,
         loginModalMessage,

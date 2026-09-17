@@ -21,12 +21,14 @@ import { safeStorage } from '../../utils/safeHelpers';
 import { StorageService } from '../../services/storageService';
 import { FirebaseAuthService } from '../../services/firebaseAuthService';
 import { ActivityTrackingService } from '../../services/activityTrackingService';
+import { useApp } from '../../context/AppContext';
 
 export interface LoginModalProps {
   isOpen?: boolean;
   onSuccess?: (user: UserProfile) => void;
   setUser?: (user: UserProfile) => void;
   setIsLoggedIn?: (loggedIn: boolean) => void;
+  setShowAuthModal?: (show: boolean) => void;
   onClose?: () => void;
   customMessage?: string;
 }
@@ -47,14 +49,39 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onSuccess,
   setUser,
   setIsLoggedIn,
+  setShowAuthModal: externalSetShowAuthModal,
   onClose,
   customMessage
 }) => {
+  const { 
+    closeLoginModal, 
+    setIsLoginModalOpen, 
+    setUser: appSetUser, 
+    setIsLoggedIn: appSetIsLoggedIn 
+  } = useApp();
+
   const [activeTab, setActiveTab] = useState<AuthTab>('signin');
   const [isSigningIn, setIsSigningIn] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'info' | 'success' | 'error'>('info');
+
+  /**
+   * Helper to ensure auth modal is closed immediately across all states and props
+   */
+  const setShowAuthModal = (show: boolean) => {
+    if (externalSetShowAuthModal) {
+      externalSetShowAuthModal(show);
+    }
+    if (!show) {
+      setIsSigningIn(false);
+      if (onClose) onClose();
+      closeLoginModal();
+      setIsLoginModalOpen(false);
+    } else {
+      setIsLoginModalOpen(true);
+    }
+  };
 
   const [fullName, setFullName] = useState<string>(() => {
     try {
@@ -126,17 +153,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       // 2. DISMISS LOADING STATE IMMEDIATELY so user is NEVER stuck on "Signing in..."
       setIsSigningIn(false);
 
-      // 3. React App State Updates
-      if (setUser) setUser(enrichedProfile);
+      // 3. React App State Updates: Immediately update global auth state (isLoggedIn = true)
       if (setIsLoggedIn) setIsLoggedIn(true);
+      if (appSetIsLoggedIn) appSetIsLoggedIn(true);
+      if (setUser) setUser(enrichedProfile);
+      if (appSetUser) appSetUser(enrichedProfile);
       if (onSuccess) onSuccess(enrichedProfile);
 
       // 4. Dispatch global window events
       window.dispatchEvent(new CustomEvent('btn:profile-updated', { detail: enrichedProfile }));
       window.dispatchEvent(new CustomEvent('btn:user-login', { detail: enrichedProfile }));
 
-      // 5. Dismiss modal dialog immediately
+      // 5. Dismiss modal dialog immediately: Call setShowAuthModal(false) and onClose()
+      setShowAuthModal(false);
       if (onClose) onClose();
+      closeLoginModal();
+      setIsLoginModalOpen(false);
 
       showToast(`स्वागत छ, ${enrichedProfile.displayName || enrichedProfile.name}!`, 'success');
 
@@ -154,10 +186,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     } catch (err) {
       console.error('Authentication finalization error:', err);
       setIsSigningIn(false);
-      if (setUser) setUser(profileData);
       if (setIsLoggedIn) setIsLoggedIn(true);
+      if (appSetIsLoggedIn) appSetIsLoggedIn(true);
+      if (setUser) setUser(profileData);
+      if (appSetUser) appSetUser(profileData);
       if (onSuccess) onSuccess(profileData);
+      setShowAuthModal(false);
       if (onClose) onClose();
+      closeLoginModal();
+      setIsLoginModalOpen(false);
     }
   };
 
@@ -213,6 +250,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           hasReceivedCompletionBonus: false
         };
 
+        // Reset loading state and auto-close modal immediately upon authentication success
+        setIsSigningIn(false);
+        setShowAuthModal(false);
+        if (onClose) onClose();
         finalizeAuthentication(fastProfile);
       }
     }, 3000);
@@ -222,6 +263,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       if (!hasHandled) {
         hasHandled = true;
         clearTimeout(timeoutHandle);
+        // Reset loading state and auto-close modal immediately upon authentication success
+        setIsSigningIn(false);
+        setShowAuthModal(false);
+        if (onClose) onClose();
         finalizeAuthentication(googleProfile);
       }
     } catch (err: any) {
@@ -270,6 +315,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           hasReceivedCompletionBonus: false
         };
 
+        // Reset loading state and auto-close modal immediately upon authentication success
+        setIsSigningIn(false);
+        setShowAuthModal(false);
+        if (onClose) onClose();
         finalizeAuthentication(fallbackProfile);
       }
     } finally {
@@ -342,6 +391,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           hasReceivedCompletionBonus: false
         };
 
+        // Reset loading state and auto-close modal immediately upon authentication success
+        setIsSigningIn(false);
+        setShowAuthModal(false);
+        if (onClose) onClose();
         finalizeAuthentication(fastProfile);
       }
     }, 3000);
@@ -351,6 +404,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       if (!hasHandled) {
         hasHandled = true;
         clearTimeout(timeoutHandle);
+        // Reset loading state and auto-close modal immediately upon authentication success
+        setIsSigningIn(false);
+        setShowAuthModal(false);
+        if (onClose) onClose();
         finalizeAuthentication(profile);
       }
     } catch (err: any) {
@@ -400,6 +457,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           hasReceivedCompletionBonus: false
         };
 
+        // Reset loading state and auto-close modal immediately upon authentication success
+        setIsSigningIn(false);
+        setShowAuthModal(false);
+        if (onClose) onClose();
         finalizeAuthentication(fallbackProfile);
       }
     } finally {
@@ -468,6 +529,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           hasReceivedCompletionBonus: false
         };
 
+        // Reset loading state and auto-close modal immediately upon authentication success
+        setIsSigningIn(false);
+        setShowAuthModal(false);
+        if (onClose) onClose();
         finalizeAuthentication(fastProfile);
       }
     }, 3000);
@@ -477,6 +542,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       if (!hasHandled) {
         hasHandled = true;
         clearTimeout(timeoutHandle);
+        // Reset loading state and auto-close modal immediately upon authentication success
+        setIsSigningIn(false);
+        setShowAuthModal(false);
+        if (onClose) onClose();
         finalizeAuthentication(newProfile);
       }
     } catch (err: any) {
@@ -521,6 +590,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             hasReceivedCompletionBonus: false
           };
 
+          // Reset loading state and auto-close modal immediately upon authentication success
+          setIsSigningIn(false);
+          setShowAuthModal(false);
+          if (onClose) onClose();
           finalizeAuthentication(fallbackProfile);
         }
       }
@@ -560,13 +633,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
    * Continue as Guest
    */
   const handleContinueAsGuest = () => {
+    setIsSigningIn(false);
     const guest = StorageService.getGuestProfile();
     StorageService.saveUserProfile(guest);
     if (setUser) setUser(guest);
+    if (appSetUser) appSetUser(guest);
     if (setIsLoggedIn) setIsLoggedIn(false);
+    if (appSetIsLoggedIn) appSetIsLoggedIn(false);
     if (onSuccess) onSuccess(guest);
     window.dispatchEvent(new CustomEvent('btn:profile-updated', { detail: guest }));
     showToast('अतिथि (Guest) मोड सक्रिय भयो।', 'info');
+    setShowAuthModal(false);
     if (onClose) onClose();
   };
 
@@ -575,6 +652,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   return (
     <div 
       id="login-auth-modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          setShowAuthModal(false);
+        }
+      }}
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200"
     >
       {/* Toast Notification */}
@@ -599,16 +681,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         className="relative w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden my-auto transition-all"
       >
         {/* Top Close Button */}
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-4 right-4 z-20 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-            title="बन्द गर्नुहोस्"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setShowAuthModal(false)}
+          className="absolute top-4 right-4 z-20 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+          title="बन्द गर्नुहोस्"
+        >
+          <X className="w-5 h-5" />
+        </button>
 
         {/* Top Header */}
         <div className="pt-7 pb-4 px-6 sm:px-8 text-center bg-slate-50/70 border-b border-slate-100 relative">

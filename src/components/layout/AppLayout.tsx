@@ -50,10 +50,12 @@ export const AppLayout: React.FC<AppLayoutProps> = () => {
     setIsAdminPinModalOpen,
     verifyAdminPin,
     isLoginModalOpen,
+    setIsLoginModalOpen,
     closeLoginModal,
     loginModalMessage,
     user,
-    setUser
+    setUser,
+    setIsLoggedIn
   } = useApp();
 
   const [purchasingModalNote, setPurchasingModalNote] = React.useState<any>(null);
@@ -156,7 +158,9 @@ export const AppLayout: React.FC<AppLayoutProps> = () => {
         <LoginModal
           isOpen={isLoginModalOpen}
           onClose={closeLoginModal}
+          setShowAuthModal={setIsLoginModalOpen}
           setUser={setUser}
+          setIsLoggedIn={setIsLoggedIn}
           customMessage={loginModalMessage}
         />
       )}
