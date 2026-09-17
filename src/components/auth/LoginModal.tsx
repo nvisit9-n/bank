@@ -141,6 +141,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       // 1. Save session in LocalStorage immediately
       const serialized = JSON.stringify(enrichedProfile);
+      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('user', serialized);
       localStorage.setItem('user_profile', serialized);
       safeStorage.setItem('user_profile', serialized);
       localStorage.setItem('btn_user_profile_v1', serialized);
@@ -172,9 +174,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       showToast(`स्वागत छ, ${enrichedProfile.displayName || enrichedProfile.name}!`, 'success');
 
-      // 6. Asynchronous non-blocking background sync directly to Firestore `users` collection
-      FirebaseAuthService.syncUserProfileToFirestore(enrichedProfile).catch(() => {});
-      DbService.saveStudentProfile(enrichedProfile).catch(() => {});
+      // 6. DO NOT block UI or wait for Firestore async background sync (`saveUserToFirestore`).
+      // Run Firestore profile creation asynchronously in the background.
+      setTimeout(() => {
+        FirebaseAuthService.saveUserToFirestore(enrichedProfile).catch(() => {});
+        FirebaseAuthService.syncUserProfileToFirestore(enrichedProfile).catch(() => {});
+        DbService.saveStudentProfile(enrichedProfile).catch(() => {});
+      }, 0);
 
       // 7. Log authenticated user login event
       ActivityTrackingService.logActivity({
@@ -1058,3 +1064,6 @@ function GoogleGIcon({ className = 'w-5 h-5' }: { className?: string }) {
     </svg>
   );
 }
+
+export const AuthModal = LoginModal;
+export default LoginModal;

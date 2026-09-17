@@ -21,6 +21,13 @@ export class FirebaseAuthService {
   }
 
   /**
+   * Save user profile directly to Firestore users collection
+   */
+  static async saveUserToFirestore(profile: UserProfile): Promise<boolean> {
+    return this.syncUserProfileToFirestore(profile);
+  }
+
+  /**
    * Synchronize user profile directly to Firestore `users` collection
    */
   static async syncUserProfileToFirestore(profile: UserProfile): Promise<boolean> {

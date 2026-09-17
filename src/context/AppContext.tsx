@@ -141,6 +141,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode; initialUser?: Us
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    try {
+      if (typeof window !== 'undefined' && localStorage.getItem('isLoggedIn') === 'true') {
+        return true;
+      }
+    } catch {}
     const u = initialUser ? sanitizeUserProfile(initialUser) : StorageService.getUserProfile();
     return Boolean(u && !u.isGuest && !!u.email);
   });
@@ -415,6 +420,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode; initialUser?: Us
     StorageService.saveUserProfile(sanitized);
     const loggedIn = Boolean(sanitized && !sanitized.isGuest && !!sanitized.email);
     setIsLoggedIn(loggedIn);
+    try {
+      localStorage.setItem('isLoggedIn', loggedIn ? 'true' : 'false');
+      localStorage.setItem('user', JSON.stringify(sanitized));
+      localStorage.setItem('user_profile', JSON.stringify(sanitized));
+    } catch {}
     if (loggedIn) {
       setIsLoginModalOpen(false);
     }
@@ -430,6 +440,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode; initialUser?: Us
   const logout = () => {
     try {
       StorageService.clearUserProfile();
+      localStorage.setItem('isLoggedIn', 'false');
+      localStorage.removeItem('user');
+      localStorage.removeItem('btn_user_session_token');
     } catch (e) {
       console.error('Logout error', e);
     }
